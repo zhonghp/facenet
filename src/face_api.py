@@ -141,8 +141,8 @@ class FaceAPI:
 if __name__ == '__main__':
     import sys
     if len(sys.argv) != 4:
-        print 'Usage1: python face_api.py [in_folder] [out_folder] [1]'
-        print 'Usage2: python face_api.py [img1_file] [img2_file] [2]'
+        print('Usage1: python face_api.py [in_folder] [out_folder] [1]')
+        print('Usage2: python face_api.py [img1_file] [img2_file] [2]')
         sys.exit(-1)
 
     import os
@@ -160,12 +160,12 @@ if __name__ == '__main__':
                 if img.ndim == 2:
                     img = facenet.to_rgb(img)
                 img = img[:, :, 0:3]
-                bboxes = self.detect_all_faces(img)
+                bboxes = face_api.detect_all_faces(img)
                 if bboxes is None:
-                    print 'No detected face in:', path
+                    print('No detected face in:', path)
                     continue
 
-                print len(bboxes), 'faces detected in', path
+                print(len(bboxes), 'faces detected in', path)
                 for idx, bbox in enumerate(bboxes):
                     face = face_api.align_face(img, bbox)
                     out_file = os.path.join(out_folder, subdir)
