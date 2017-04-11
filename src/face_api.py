@@ -3,7 +3,7 @@
 # @Author: vasezhong
 # @Date:   2017-04-11 15:48:14
 # @Last Modified by:   vasezhong
-# @Last Modified time: 2017-04-11 17:06:38
+# @Last Modified time: 2017-04-11 17:53:56
 
 from __future__ import absolute_import
 from __future__ import division
@@ -93,15 +93,19 @@ class FaceAPI:
             return det
         return None
 
-    def __get_face_feature(self, img_rgb, bbox):
-        face_rgb = self.align_face(img_rgb, bbox)
+    def __get_face_feature(self, face_rgb):
         images = np.zeors((1, self.__image_size, self.__image_size, 3))
         images[0, :,:,:] = facenet.prewhiten(face_rgb)
         feed_dict = {self.__images_placeholder: images, self.__phase_train_placeholder: False}
 
         embed_array = np.zeros((1, self.__embedding_size))
         embed_array[:, :] = self.__extract_sess.run(self.__embeddings, feed_dict=feed_dict)
-        return face_rgb, embed_array[0, :]
+        return embed_array[0, :]
+
+    def __get_face_feature(self, img_rgb, bbox):
+        face_rgb = self.align_face(img_rgb, bbox)
+        feature = self.__get_face_feature(face_rgb)
+        return face_rgb, feature
 
     def save_db(self, filename="train.pkl"):
         self.__db.save(filename)
@@ -124,6 +128,7 @@ class FaceAPI:
             count, score_list = self.__search_db_by_face(img_rgb, bbox, max_num, threshold)
             yield bbox, count, score_list
 
+    '''
     def __append_face_to_db(self, img_rgb, bbox, label):
         if isinstance(label, str):
             label = label.decode('utf-8')
@@ -136,13 +141,20 @@ class FaceAPI:
             return
         for bbox in bboxes:
             self.__append_face_to_db(img_rgb, bbox, label)
+    '''
+
+    def append_face_to_db(self, face_rgb, label):
+        if isinstance(label, str):
+            label = label.decode('utf-8')
+        feature = self.__get_face_feature(face_rgb)
+        self.__db.append_db(face_rgb, feature, label)
 
 
 if __name__ == '__main__':
     import sys
     if len(sys.argv) != 4:
         print('Usage1: python face_api.py [in_folder] [out_folder] [1]')
-        print('Usage2: python face_api.py [img1_file] [img2_file] [2]')
+        print('Usage2: python face_api.py [db_folder] [test_folder] [2]')
         sys.exit(-1)
 
     import os
@@ -173,3 +185,57 @@ if __name__ == '__main__':
                         os.makedirs(out_file)
                     out_file = os.path.join(out_file, str(idx)+'.jpg')
                     misc.imsave(out_file, face)
+    elif mode == 2:
+        import time
+        db_folder = sys.argv[1].strip()
+        test_folder = sys.argv[2].strip()
+        face_api = FaceAPI()
+        for subdir in os.listdir(db_folder):
+            folder = os.path.join(in_folder, subdir)
+            for path in os.listdir(folder):
+                path = os.path.join(folder, path)
+                img = misc.imread(path)
+                assert img.ndim >= 2
+                if img.ndim == 2:
+                    img = facenet.to_rgb(img)
+                img = img[:, :, 0:3]
+                face_api.append_face_to_db(img, subdir)
+        face_api.save_db()
+
+        writer = open('scores.txt', 'w')
+
+        face_api = FaceAPI()
+        face_api.load_db()
+        start = time.time()
+        for subdir, dirs, files in os.walk(test_folder):
+            for path in files:
+                (label, fname) = (os.path.basename(subdir), path)
+                (name, ext) = os.path.splitext(fname)
+
+                img = misc.imread(os.path.join(subdir, fname))
+                assert img.ndim >= 2
+                if img.ndim == 2:
+                    img = facenet.to_rgb(img)
+                img = img[:, :, 0:3]
+
+                print("test label: {}".format(label))
+                print("test filename: {}".format(fname))
+                max_label = ''
+                max_similarity = -1000
+                for idx, result in enumerate(face_api.search_db(img)):
+                    bbox, count, score_list = result
+                    print("\tsearch {} faces in db".format(count))
+                    print("\tsimilarity: {}".format(score_list))
+                    for (item, similarity) in score_list:
+                        label = item.label.encode('utf-8')
+                        if similarity >= max_similarity:
+                            max_label = label
+                            max_similarity = similarity
+                writer.writer(name + '\t' + max_label + '\t' + str(max_similarity) + '\n')
+        end = time.time()
+        print(end-start, 's')
+        writer.flush()
+        writer.close()
+
+    else:
+        pass
