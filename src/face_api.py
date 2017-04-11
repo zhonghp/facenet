@@ -36,24 +36,25 @@ class FaceAPI:
 
         self.__db = db.DbManager()
 
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.__gpu_memory_fraction)
-        self.__detect_sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
-        with self.__detect_sess.as_default():
-            self.__pnet, self.__rnet, self.__onet = align.detect_face.create_mtcnn(self.__detect_sess, None)
+        with tf.Graph().as_default():
+            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.__gpu_memory_fraction)
+            self.__detect_sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
+            with self.__detect_sess.as_default():
+                self.__pnet, self.__rnet, self.__onet = align.detect_face.create_mtcnn(self.__detect_sess, None)
 
-        self.__extract_sess = tf.Session()
-        with self.__extract_sess.as_default():
-            meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(self.__model_dir))
-            facenet.load_model(self.__model_dir, meta_file, ckpt_file)
-            self.__images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-            self.__embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-            self.__phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
+            self.__extract_sess = tf.Session()
+            with self.__extract_sess.as_default():
+                meta_file, ckpt_file = facenet.get_model_filenames(os.path.expanduser(self.__model_dir))
+                facenet.load_model(self.__model_dir, meta_file, ckpt_file)
+                self.__images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+                self.__embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+                self.__phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
-            image_size = self.__images_placeholder.get_shape()[1]
-            assert image_size == self.__image_size
+                image_size = self.__images_placeholder.get_shape()[1]
+                assert image_size == self.__image_size
 
-            embedding_size = self.__embeddings.get_shape()[1]
-            assert embedding_size == self.__embedding_size
+                embedding_size = self.__embeddings.get_shape()[1]
+                assert embedding_size == self.__embedding_size
 
     def align_face(self, img_rgb, bbox):
         assert bbox is not None
@@ -93,8 +94,8 @@ class FaceAPI:
             return det
         return None
 
-    def __get_face_feature(self, face_rgb):
-        images = np.zeors((1, self.__image_size, self.__image_size, 3))
+    def __get_feature(self, face_rgb):
+        images = np.zeros((1, self.__image_size, self.__image_size, 3))
         images[0, :,:,:] = facenet.prewhiten(face_rgb)
         feed_dict = {self.__images_placeholder: images, self.__phase_train_placeholder: False}
 
@@ -104,7 +105,7 @@ class FaceAPI:
 
     def __get_face_feature(self, img_rgb, bbox):
         face_rgb = self.align_face(img_rgb, bbox)
-        feature = self.__get_face_feature(face_rgb)
+        feature = self.__get_feature(face_rgb)
         return face_rgb, feature
 
     def save_db(self, filename="train.pkl"):
@@ -146,7 +147,7 @@ class FaceAPI:
     def append_face_to_db(self, face_rgb, label):
         if isinstance(label, str):
             label = label.decode('utf-8')
-        feature = self.__get_face_feature(face_rgb)
+        feature = self.__get_feature(face_rgb)
         self.__db.append_db(face_rgb, feature, label)
 
 
@@ -191,7 +192,7 @@ if __name__ == '__main__':
         test_folder = sys.argv[2].strip()
         face_api = FaceAPI()
         for subdir in os.listdir(db_folder):
-            folder = os.path.join(in_folder, subdir)
+            folder = os.path.join(db_folder, subdir)
             for path in os.listdir(folder):
                 path = os.path.join(folder, path)
                 img = misc.imread(path)
@@ -231,7 +232,7 @@ if __name__ == '__main__':
                         if similarity >= max_similarity:
                             max_label = label
                             max_similarity = similarity
-                writer.writer(name + '\t' + max_label + '\t' + str(max_similarity) + '\n')
+                writer.write(name + '\t' + max_label + '\t' + str(max_similarity) + '\n')
         end = time.time()
         print(end-start, 's')
         writer.flush()
