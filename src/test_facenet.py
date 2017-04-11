@@ -14,6 +14,7 @@ import sys
 import math
 import argparse
 import numpy as np
+from scipy import misc
 import tensorflow as tf
 
 import facenet
@@ -43,7 +44,7 @@ def main(args):
         bboxes1, _ = align.detect_face.detect_face(img1, minsize, pnet, rnet, onet, threshold, factor)
         nrof_faces1 = bboxes1.shape[0]
         if nrof_faces1 > 0:
-            det = bboxes1.shape[:, 0:4]
+            det = bboxes1[:, 0:4]
             img_size = np.asarray(img1.shape)[0:2]
             if nrof_faces1 > 1:
                 bbox_size = (det[:, 2] - det[:, 0]) * (det[:, 3] - det[:, 1])
@@ -70,7 +71,7 @@ def main(args):
         bboxes2, _ = align.detect_face.detect_face(img2, minsize, pnet, rnet, onet, threshold, factor)
         nrof_faces2 = bboxes2.shape[0]
         if nrof_faces2 > 0:
-            det = bboxes2.shape[:, 0:4]
+            det = bboxes2[:, 0:4]
             img_size = np.asarray(img2.shape)[0:2]
             if nrof_faces2 > 1:
                 bbox_size = (det[:, 2] - det[:, 0]) * (det[:, 3] - det[:, 1])
@@ -89,7 +90,7 @@ def main(args):
             scaled2 = misc.imresize(cropped, (args.image_size, args.image_size), interp='bilinear')
             misc.imsave('aligned2.jpg', scaled2)
 
-        images = np.zeros((2, args.image_size, image_size, 3))
+        images = np.zeros((2, args.image_size, args.image_size, 3))
         images[0, :,:,:] = facenet.prewhiten(scaled1)
         images[1, :,:,:] = facenet.prewhiten(scaled2)
 
@@ -112,9 +113,9 @@ def main(args):
             feed_dict = {images_placeholder: images, phase_train_placeholder: False}
             emb_array[:, :] = sess.run(embeddings, feed_dict=feed_dict)
 
-            print emb_array[0, :].shape, emb_array[1, :].shape
-            dist = np.sum(np.square(np.subtract(emb_array[0, :], emb_array[1, :])), 1)
-            print dist
+            print(emb_array[0, :].shape, emb_array[1, :].shape)
+            dist = np.sum(np.square(np.subtract(emb_array[0, :], emb_array[1, :])), 0)
+            print(dist)
 
 
 def parse_arguments(argv):
